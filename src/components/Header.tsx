@@ -7,8 +7,7 @@ import {
   Sparkles,
   Store,
   Sun,
-  Moon,
-  ShieldCheck
+  Moon
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -19,7 +18,6 @@ interface HeaderProps {
   setActiveOutlet: (outlet: string) => void;
   theme: 'dark' | 'light' | 'soft';
   setTheme: (t: 'dark' | 'light' | 'soft') => void;
-  isAdminRoute?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,8 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeOutlet,
   setActiveOutlet,
   theme,
-  setTheme,
-  isAdminRoute = false
+  setTheme
 }) => {
   const toggleTheme = () => {
     if (theme === 'dark') setTheme('light');
@@ -57,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs - Clean Public Navigation Only */}
         <nav className="nav-tabs">
           <button
             className={`nav-tab ${activeTab === 'chat' ? 'active' : ''}`}
@@ -93,20 +90,9 @@ export const Header: React.FC<HeaderProps> = ({
             <Database className="tab-icon" />
             <span>RAG Knowledge</span>
           </button>
-
-          {/* Admin Tab - Exclusively for Admin /admin route */}
-          {isAdminRoute && (
-            <button
-              className={`nav-tab admin-tab ${activeTab === 'admin' ? 'active' : ''}`}
-              onClick={() => setActiveTab('admin')}
-            >
-              <ShieldCheck className="tab-icon admin" />
-              <span>Admin Portal (/admin)</span>
-            </button>
-          )}
         </nav>
 
-        {/* Controls: Outlet Selector & Theme Switcher ONLY */}
+        {/* Header Controls: Outlet Selector & Theme Switcher ONLY */}
         <div className="header-controls">
           <div className="outlet-selector">
             <Store className="selector-icon" />
@@ -123,24 +109,11 @@ export const Header: React.FC<HeaderProps> = ({
           <button 
             className="header-btn" 
             onClick={toggleTheme} 
-            title={`Current Theme: ${theme.toUpperCase()}. Click to toggle theme.`}
+            title={`Current Theme: ${theme.toUpperCase()}. Click to change theme.`}
           >
             {theme === 'dark' ? <Moon className="btn-icon moon" /> : <Sun className="btn-icon sun" />}
             <span className="theme-text">{theme === 'dark' ? 'Midnight' : theme === 'light' ? 'Light' : 'Slate'}</span>
           </button>
-
-          {/* Admin Portal Link Button */}
-          {!isAdminRoute && (
-            <a 
-              href="#/admin" 
-              onClick={() => setActiveTab('admin')}
-              className="admin-link-btn"
-              title="Admin Portal (Database & Settings)"
-            >
-              <ShieldCheck className="btn-icon" />
-              <span>Admin Portal</span>
-            </a>
-          )}
         </div>
       </div>
     </header>

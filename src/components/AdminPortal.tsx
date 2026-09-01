@@ -10,7 +10,9 @@ import {
   Cpu, 
   Lock,
   Sliders,
-  Sparkles
+  LogOut,
+  UserCheck,
+  AlertCircle
 } from 'lucide-react';
 
 interface AdminPortalProps {
@@ -22,6 +24,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   activeOutlet,
   setActiveOutlet
 }) => {
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return sessionStorage.getItem('foodchow_admin_auth') === 'true';
+  });
+
+  const [adminId, setAdminId] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // Database & Settings State
   const [dbType, setDbType] = useState<'MOCK' | 'POSTGRESQL' | 'SUPABASE' | 'MONGODB'>('MOCK');
   const [connString, setConnString] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -30,13 +42,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [copiedSql, setCopiedSql] = useState(false);
   const [refundThreshold, setRefundThreshold] = useState<number>(500);
 
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminId.trim() === 'admin' && (adminPassword === 'admin123' || adminPassword === 'foodchow123')) {
+      setIsAuthenticated(true);
+      sessionStorage.setItem('foodchow_admin_auth', 'true');
+      setLoginError('');
+    } else {
+      setLoginError('Invalid Admin ID or Password. (Hint: ID: admin, Pass: admin123)');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    sessionStorage.removeItem('foodchow_admin_auth');
+  };
+
   const handleSaveDb = () => {
     DatabaseAdapter.setConfig({
       type: dbType,
       connectionString: connString,
       apiKey: apiKey
     });
-    alert(`[Admin Config] Database integration updated to ${dbType}! Ready for real data calls.`);
+    alert(`[Admin Config Saved] Database integration updated to ${dbType}! Ready for live calls.`);
   };
 
   const handleCopySql = () => {
@@ -45,20 +73,89 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setTimeout(() => setCopiedSql(false), 2000);
   };
 
+  // RENDER ADMIN LOGIN SCREEN IF NOT AUTHENTICATED
+  if (!isAuthenticated) {
+    return (
+      <div className="admin-login-wrapper">
+        <div className="admin-login-card">
+          <div className="login-header">
+            <div className="lock-icon-bg">
+              <Lock className="lock-icon" />
+            </div>
+            <h2>Admin Portal Authentication</h2>
+            <p>Protected System Access. Enter Admin ID & Password to continue.</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="login-form">
+            {loginError && (
+              <div className="login-error-banner">
+                <AlertCircle className="error-icon" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label>Admin ID:</label>
+              <input
+                type="text"
+                className="admin-input"
+                placeholder="Enter Admin ID (Default: admin)"
+                value={adminId}
+                onChange={(e) => setAdminId(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Password:</label>
+              <input
+                type="password"
+                className="admin-input"
+                placeholder="Enter Password (Default: admin123)"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button type="submit" className="btn-admin-login">
+              <UserCheck className="btn-icon" />
+              Unlock Admin Console
+            </button>
+          </form>
+
+          <div className="credentials-hint">
+            <span>🔐 Admin Credentials Hint:</span>
+            <code>ID: admin | Password: admin123</code>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // RENDER AUTHENTICATED ADMIN DASHBOARD
   return (
     <div className="admin-portal-layout">
-      {/* Admin Header */}
+      {/* Admin Header Banner */}
       <div className="admin-banner">
         <div className="banner-left">
           <ShieldCheck className="admin-icon" />
           <div>
-            <h2>FoodChow Admin Portal (/admin)</h2>
-            <p>Protected Administrator Console for Real Database Integration, LLM API Keys, and Policy Guardrail Controls.</p>
+            <h2>FoodChow Admin Console (/admin)</h2>
+            <p>Protected Administrator Management Suite. Configure Real Database Connectors & LLM Keys.</p>
           </div>
         </div>
-        <div className="admin-status-badge">
-          <Lock className="badge-icon" />
-          <span>Admin Access Verified</span>
+
+        <div className="banner-right">
+          <div className="admin-status-badge">
+            <UserCheck className="badge-icon" />
+            <span>Logged in as Admin</span>
+          </div>
+
+          <button className="btn-admin-logout" onClick={handleLogout} title="Logout Admin Session">
+            <LogOut className="btn-icon" />
+            <span>Logout Session</span>
+          </button>
         </div>
       </div>
 
@@ -67,12 +164,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         <div className="admin-card">
           <div className="card-title-row">
             <Database className="card-icon" />
-            <h3>Real Database Connection Setup</h3>
+            <h3>Real Database Connector Setup</h3>
           </div>
-          <p className="card-sub">Configure your PostgreSQL, Supabase, or MongoDB instance to replace mock datasets.</p>
+          <p className="card-sub">Connect your real PostgreSQL, Supabase, or MongoDB instance to replace mock datasets.</p>
 
           <div className="form-group">
-            <label>Database Provider:</label>
+            <label>Database Engine Provider:</label>
             <select 
               value={dbType} 
               onChange={(e) => setDbType(e.target.value as any)}
@@ -128,11 +225,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </div>
 
-        {/* LLM & Guardrails Policy Controls */}
+        {/* LLM & Guardrail Controls */}
         <div className="admin-card">
           <div className="card-title-row">
             <Cpu className="card-icon" />
-            <h3>LLM Provider & Policy Thresholds</h3>
+            <h3>LLM Engine & Policy Guardrails</h3>
           </div>
           <p className="card-sub">Plug in custom OpenAI/Gemini API keys and configure automated guardrail limits.</p>
 

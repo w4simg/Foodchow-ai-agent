@@ -12,28 +12,24 @@ import { FoodChowAgentEngine } from './agent/agentEngine';
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'chat' | 'dashboard' | 'rag' | 'scenarios' | 'admin'>('chat');
   const [activeOutlet, setActiveOutlet] = useState<string>('OUTLET-12');
-  
-  // Requirement 5: Default theme set to Midnight Dark ('dark')
   const [theme, setTheme] = useState<'dark' | 'light' | 'soft'>('dark');
-  const [isAdminRoute, setIsAdminRoute] = useState(false);
 
-  // Check URL pathname or hash for /admin route
+  // Check URL path or hash for /admin route
   useEffect(() => {
-    const checkAdminRoute = () => {
+    const checkRoute = () => {
       const isPathAdmin = window.location.pathname.includes('/admin') || window.location.hash.includes('/admin');
-      setIsAdminRoute(isPathAdmin);
       if (isPathAdmin) {
         setActiveTab('admin');
       }
     };
 
-    checkAdminRoute();
-    window.addEventListener('popstate', checkAdminRoute);
-    window.addEventListener('hashchange', checkAdminRoute);
+    checkRoute();
+    window.addEventListener('popstate', checkRoute);
+    window.addEventListener('hashchange', checkRoute);
 
     return () => {
-      window.removeEventListener('popstate', checkAdminRoute);
-      window.removeEventListener('hashchange', checkAdminRoute);
+      window.removeEventListener('popstate', checkRoute);
+      window.removeEventListener('hashchange', checkRoute);
     };
   }, []);
 
@@ -174,7 +170,6 @@ export const App: React.FC = () => {
         setActiveOutlet={setActiveOutlet}
         theme={theme}
         setTheme={setTheme}
-        isAdminRoute={isAdminRoute || activeTab === 'admin'}
       />
 
       <main className="app-main-content">

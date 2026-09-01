@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { FOODCHOW_KNOWLEDGE_BASE, searchKnowledgeBase } from '../rag/knowledgeBase';
-import { RAGSearchResult, SupportCategory } from '../types/agent';
+import { RAGDocument, RAGSearchResult, SupportCategory } from '../types/agent';
 import { FormattedText } from '../utils/formatText';
-import { Database, Search, Tag, Sparkles } from 'lucide-react';
+import { DocumentModal } from './DocumentModal';
+import { Database, Search, Tag, Sparkles, ExternalLink, BookOpen } from 'lucide-react';
 
 export const RAGInspector: React.FC = () => {
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [results, setResults] = useState<RAGSearchResult[]>([]);
+  const [activeDocModal, setActiveDocModal] = useState<RAGDocument | null>(null);
 
   const handleSearch = () => {
     if (!query.trim()) {
@@ -31,7 +33,7 @@ export const RAGInspector: React.FC = () => {
           <Database className="rag-icon" />
           <div>
             <h2>FoodChow Knowledge Base & RAG Index Inspector</h2>
-            <p>Query the indexed vector/hybrid RAG troubleshooting documentation used by the autonomous support agent.</p>
+            <p>Query the indexed vector/hybrid RAG troubleshooting documentation used by the autonomous support agent. Click any card to pop up the full article.</p>
           </div>
         </div>
 
@@ -74,19 +76,28 @@ export const RAGInspector: React.FC = () => {
             <h3>RAG Vector Search Results ({results.length} Matches)</h3>
             <div className="rag-full-card-list">
               {results.map((res, i) => (
-                <div key={i} className="rag-card full-width match">
+                <div 
+                  key={i} 
+                  className="rag-card full-width match clickable"
+                  onClick={() => setActiveDocModal(res.doc)}
+                >
                   <div className="card-badge-row">
                     <span className="cat-badge">{res.doc.category}</span>
                     <span className="score-badge">Relevance Score: {res.score.toFixed(2)}</span>
                   </div>
 
-                  <h4>{res.doc.title}</h4>
+                  <div className="card-title-row">
+                    <h4>{res.doc.title}</h4>
+                    <ExternalLink className="pop-icon" />
+                  </div>
 
                   <div className="matched-tags">
                     <span className="tag-label">Matched Tokens: </span>
-                    {res.matchedKeywords.map((kw, k) => (
-                      <span key={k} className="token-tag">{kw}</span>
-                    ))}
+                    <div className="tags-chips">
+                      {res.matchedKeywords.map((kw, k) => (
+                        <span key={k} className="token-tag">{kw}</span>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="doc-content-formatted">
@@ -101,7 +112,11 @@ export const RAGInspector: React.FC = () => {
             <h3>Indexed Documentation Repository ({filteredBaseDocs.length} Articles)</h3>
             <div className="card-grid">
               {filteredBaseDocs.map((doc) => (
-                <div key={doc.id} className="rag-card">
+                <div 
+                  key={doc.id} 
+                  className="rag-card clickable"
+                  onClick={() => setActiveDocModal(doc)}
+                >
                   <div className="card-badge-row">
                     <span className="cat-badge">{doc.category}</span>
                     <span className="id-badge">{doc.id}</span>
@@ -111,20 +126,33 @@ export const RAGInspector: React.FC = () => {
 
                   <div className="tags-row">
                     <Tag className="tag-icon" />
-                    {doc.tags.map((t, idx) => (
-                      <span key={idx} className="doc-tag">{t}</span>
-                    ))}
+                    <div className="tags-chips">
+                      {doc.tags.map((t, idx) => (
+                        <span key={idx} className="doc-tag">{t}</span>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="doc-preview">
-                    <FormattedText content={doc.content.slice(0, 300) + '...'} />
+                    <FormattedText content={doc.content.slice(0, 180) + '...'} />
                   </div>
+
+                  <button className="btn-read-full">
+                    <BookOpen className="btn-icon" />
+                    <span>Read Full Article (Popup)</span>
+                  </button>
                 </div>
               ))}
             </div>
           </div>
         )}
       </div>
+
+      {/* Smooth Article Popup Modal */}
+      <DocumentModal
+        doc={activeDocModal}
+        onClose={() => setActiveDocModal(null)}
+      />
     </div>
   );
 };
