@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, ShieldCheck, DollarSign, Smile, Gauge, Clock } from 'lucide-react';
+import { ShieldCheck, Smile, Gauge, Headphones } from 'lucide-react';
 
 interface AnalyticsBarProps {
   totalMessages: number;
@@ -7,12 +7,8 @@ interface AnalyticsBarProps {
 }
 
 export const AnalyticsBar: React.FC<AnalyticsBarProps> = ({
-  totalMessages,
   openTicketsCount
 }) => {
-  const estimatedTokens = totalMessages * 450;
-  const estimatedCost = (estimatedTokens / 1000) * 0.0015;
-
   return (
     <div className="analytics-bar">
       <div className="stat-card">
@@ -40,10 +36,10 @@ export const AnalyticsBar: React.FC<AnalyticsBarProps> = ({
       </div>
 
       <div className="stat-card">
-        <DollarSign className="stat-icon info" />
+        <Headphones className="stat-icon info" />
         <div className="stat-info">
-          <span className="stat-val">${estimatedCost.toFixed(4)}</span>
-          <span className="stat-label">Est. LLM Token Cost ({estimatedTokens} tokens)</span>
+          <span className="stat-val">{openTicketsCount} Active</span>
+          <span className="stat-label">Human Handoff Queue</span>
         </div>
       </div>
     </div>

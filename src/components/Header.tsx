@@ -1,33 +1,27 @@
 import React from 'react';
 import { 
   Bot, 
-  Headphones, 
-  Database, 
-  Zap, 
-  Sparkles,
   Store,
   Sun,
-  Moon
+  Moon,
+  ShieldCheck,
+  ArrowLeft
 } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'chat' | 'dashboard' | 'rag' | 'scenarios' | 'admin';
-  setActiveTab: (tab: 'chat' | 'dashboard' | 'rag' | 'scenarios' | 'admin') => void;
-  openTicketsCount: number;
   activeOutlet: string;
   setActiveOutlet: (outlet: string) => void;
   theme: 'dark' | 'light' | 'soft';
   setTheme: (t: 'dark' | 'light' | 'soft') => void;
+  isAdminPage?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  activeTab,
-  setActiveTab,
-  openTicketsCount,
   activeOutlet,
   setActiveOutlet,
   theme,
-  setTheme
+  setTheme,
+  isAdminPage = false
 }) => {
   const toggleTheme = () => {
     if (theme === 'dark') setTheme('light');
@@ -35,65 +29,44 @@ export const Header: React.FC<HeaderProps> = ({
     else setTheme('dark');
   };
 
+  const handleExitAdmin = () => {
+    window.location.hash = '#/';
+    window.location.pathname = '/';
+  };
+
   return (
     <header className="app-header">
       <div className="header-container">
         {/* Brand & Logo */}
         <div className="brand-section">
-          <div className="brand-logo">
-            <Bot className="logo-icon" />
+          <div className="brand-logo" style={isAdminPage ? { background: 'linear-gradient(135deg, #EC4899, #DB2777)' } : undefined}>
+            {isAdminPage ? <ShieldCheck className="logo-icon" /> : <Bot className="logo-icon" />}
           </div>
           <div className="brand-text">
             <div className="brand-title">
-              <span>FoodChow</span> AI Support Agent
+              <span>FoodChow</span> {isAdminPage ? 'Admin Console' : 'AI Support Agent'}
             </div>
             <div className="brand-badge">
-              <span className="pulse-dot"></span>
-              Agentic Orchestrator v2.4
+              <span className="pulse-dot" style={isAdminPage ? { backgroundColor: '#EC4899', boxShadow: '0 0 6px #EC4899' } : undefined}></span>
+              {isAdminPage ? 'Protected Management Portal (/admin)' : 'Agentic Orchestrator v2.4'}
             </div>
           </div>
         </div>
 
-        {/* Navigation Tabs - Clean Public Navigation Only */}
-        <nav className="nav-tabs">
-          <button
-            className={`nav-tab ${activeTab === 'chat' ? 'active' : ''}`}
-            onClick={() => setActiveTab('chat')}
-          >
-            <Sparkles className="tab-icon" />
-            <span>Customer Chat</span>
-          </button>
-
-          <button
-            className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            <Headphones className="tab-icon" />
-            <span>Human Handoff</span>
-            {openTicketsCount > 0 && (
-              <span className="badge-count">{openTicketsCount}</span>
-            )}
-          </button>
-
-          <button
-            className={`nav-tab ${activeTab === 'scenarios' ? 'active' : ''}`}
-            onClick={() => setActiveTab('scenarios')}
-          >
-            <Zap className="tab-icon" />
-            <span>Eval Scenarios</span>
-          </button>
-
-          <button
-            className={`nav-tab ${activeTab === 'rag' ? 'active' : ''}`}
-            onClick={() => setActiveTab('rag')}
-          >
-            <Database className="tab-icon" />
-            <span>RAG Knowledge</span>
-          </button>
-        </nav>
-
-        {/* Header Controls: Outlet Selector & Theme Switcher ONLY */}
+        {/* Header Controls: Outlet Selector, Exit Admin & Theme Switcher */}
         <div className="header-controls">
+          {isAdminPage && (
+            <button 
+              className="header-btn exit-admin-btn" 
+              onClick={handleExitAdmin}
+              title="Return to Public Customer Support Chat"
+              style={{ borderColor: 'rgba(236, 72, 153, 0.4)', color: '#EC4899' }}
+            >
+              <ArrowLeft className="btn-icon" />
+              <span>Exit Admin to Customer Chat</span>
+            </button>
+          )}
+
           <div className="outlet-selector">
             <Store className="selector-icon" />
             <select 

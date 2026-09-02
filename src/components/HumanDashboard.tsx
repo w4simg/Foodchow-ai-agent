@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { EscalationTicket, ChatMessage } from '../types/agent';
+import { EscalationTicket } from '../types/agent';
+import { exportLiveHumanSessionJSON } from '../utils/jsonHistoryExporter';
+import { appStore } from '../store/appStore';
+import { FormattedText } from '../utils/formatText';
 import { 
   Headphones, 
-  ShieldAlert, 
   CheckCircle, 
   XCircle, 
-  Clock, 
   Send, 
   Wrench, 
   FileText, 
   User, 
   ChevronRight,
   AlertTriangle,
-  Sparkles
+  Download,
+  Trash2
 } from 'lucide-react';
 
 interface HumanDashboardProps {
@@ -34,6 +36,15 @@ export const HumanDashboard: React.FC<HumanDashboardProps> = ({
   const [humanInput, setHumanInput] = useState('');
 
   const selectedTicket = tickets.find(t => t.id === selectedTicketId) || tickets[0];
+
+  const cleanSummaryText = (text: string) => {
+    if (!text) return '';
+    return text
+      .replace(/^>\s*💬\s*\*Replying to.*?\*\s*/gis, '')
+      .replace(/^>.*$/gm, '')
+      .replace(/[\*#_`]/g, '')
+      .trim();
+  };
 
   const handleSendResponse = () => {
     if (!humanInput.trim() || !selectedTicket) return;
@@ -57,8 +68,34 @@ export const HumanDashboard: React.FC<HumanDashboardProps> = ({
       <div className="ticket-sidebar">
         <div className="sidebar-header">
           <Headphones className="header-icon" />
-          <span className="header-title">Human Handoff Queue</span>
-          <span className="queue-count">{tickets.length} Active</span>
+          <span className="header-title">Human Handoff</span>
+          <span className="queue-count">{tickets.length}</span>
+          <button
+            className="btn-clear-queue"
+            onClick={() => {
+              if (confirm('Are you sure you want to clear all escalated tickets from the Admin history?')) {
+                appStore.clearAllTickets();
+              }
+            }}
+            title="Clear all tickets from Admin queue"
+            style={{
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#EF4444',
+              padding: '0.2rem 0.5rem',
+              borderRadius: '6px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              marginLeft: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem'
+            }}
+          >
+            <Trash2 style={{ width: 12, height: 12 }} />
+            <span>Clear Queue</span>
+          </button>
         </div>
 
         <div className="ticket-list">
@@ -77,7 +114,7 @@ export const HumanDashboard: React.FC<HumanDashboardProps> = ({
               </div>
 
               <div className="card-customer">{t.customerName} • {t.outletName}</div>
-              <div className="card-summary">{t.summary}</div>
+              <div className="card-summary">{cleanSummaryText(t.summary)}</div>
 
               {t.controlledAction && t.controlledAction.status === 'PENDING' && (
                 <div className="pending-action-pill">
@@ -103,8 +140,57 @@ export const HumanDashboard: React.FC<HumanDashboardProps> = ({
               <span className="category-tag">{selectedTicket.category}</span>
             </div>
 
-            <div className="header-right">
+            <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <span className="outlet-name">{selectedTicket.outletName}</span>
+
+              <button
+                className="btn-export-session-json"
+                onClick={() => exportLiveHumanSessionJSON(selectedTicket)}
+                title="Download Live Session Transcript & Diagnostics as JSON File"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: '8px',
+                  background: 'rgba(236, 72, 153, 0.15)',
+                  border: '1px solid rgba(236, 72, 153, 0.4)',
+                  color: '#EC4899',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <Download style={{ width: 14, height: 14 }} />
+                <span>Export Session JSON Log</span>
+              </button>
+
+              <button
+                className="btn-delete-ticket"
+                onClick={() => {
+                  if (confirm(`Delete ticket #${selectedTicket.id}?`)) {
+                    appStore.deleteTicket(selectedTicket.id);
+                  }
+                }}
+                title="Delete this ticket"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.45rem 0.75rem',
+                  borderRadius: '8px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#EF4444',
+                  fontWeight: 700,
+                  fontSize: '0.78rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <Trash2 style={{ width: 14, height: 14 }} />
+                <span>Delete</span>
+              </button>
             </div>
           </div>
 
@@ -117,7 +203,7 @@ export const HumanDashboard: React.FC<HumanDashboardProps> = ({
                   Handoff Context & Diagnostic Summary
                 </h3>
                 <div className="context-box">
-                  <p><strong>Customer Issue:</strong> {selectedTicket.summary}</p>
+                  <p><strong>Customer Issue:</strong> {cleanSummaryText(selectedTicket.summary)}</p>
                   <p><strong>Restaurant Outlet:</strong> {selectedTicket.outletName}</p>
                 </div>
               </div>
@@ -188,10 +274,9 @@ export const HumanDashboard: React.FC<HumanDashboardProps> = ({
               <div className="intercept-history">
                 {selectedTicket.conversationHistory.map((m) => (
                   <div key={m.id} className={`chat-line ${m.sender}`}>
-                    <span className="line-sender">
-                      {m.sender === 'customer' ? 'Customer' : m.sender === 'human_agent' ? 'Human Agent' : 'AI Agent'}:
-                    </span>
-                    <span className="line-text">{m.content}</span>
+                    <div className="line-text">
+                      <FormattedText content={m.content} />
+                    </div>
                   </div>
                 ))}
               </div>

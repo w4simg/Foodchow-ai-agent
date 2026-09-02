@@ -1,15 +1,36 @@
-import React, { useState } from 'react';
-import { FOODCHOW_KNOWLEDGE_BASE, searchKnowledgeBase } from '../rag/knowledgeBase';
+import React, { useState, useEffect } from 'react';
+import { searchKnowledgeBase } from '../rag/knowledgeBase';
 import { RAGDocument, RAGSearchResult, SupportCategory } from '../types/agent';
 import { FormattedText } from '../utils/formatText';
 import { DocumentModal } from './DocumentModal';
-import { Database, Search, Tag, Sparkles, ExternalLink, BookOpen } from 'lucide-react';
+import { appStore } from '../store/appStore';
+import { Database, Search, Tag, Sparkles, ExternalLink, BookOpen, Plus, Edit3, Trash2 } from 'lucide-react';
 
-export const RAGInspector: React.FC = () => {
+interface RAGInspectorProps {
+  onViewDoc?: (doc: RAGDocument) => void;
+  onEditDoc?: (doc: RAGDocument) => void;
+  onCreateDoc?: () => void;
+  onDeleteDoc?: (id: string) => void;
+}
+
+export const RAGInspector: React.FC<RAGInspectorProps> = ({
+  onViewDoc,
+  onEditDoc,
+  onCreateDoc,
+  onDeleteDoc
+}) => {
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [results, setResults] = useState<RAGSearchResult[]>([]);
   const [activeDocModal, setActiveDocModal] = useState<RAGDocument | null>(null);
+  const [baseDocs, setBaseDocs] = useState<RAGDocument[]>(() => appStore.getKnowledgeBase());
+
+  useEffect(() => {
+    const unsubscribe = appStore.subscribe(() => {
+      setBaseDocs([...appStore.getKnowledgeBase()]);
+    });
+    return unsubscribe;
+  }, []);
 
   const handleSearch = () => {
     if (!query.trim()) {
@@ -21,23 +42,54 @@ export const RAGInspector: React.FC = () => {
     setResults(searchRes);
   };
 
-  const filteredBaseDocs = FOODCHOW_KNOWLEDGE_BASE.filter(doc => 
+  const filteredBaseDocs = baseDocs.filter(doc => 
     selectedCategory === 'ALL' || doc.category === selectedCategory
   );
+
+  const handleView = (doc: RAGDocument) => {
+    if (onViewDoc) onViewDoc(doc);
+    else setActiveDocModal(doc);
+  };
 
   return (
     <div className="rag-inspector-layout">
       {/* Search Header */}
       <div className="rag-header-box">
-        <div className="title-area">
-          <Database className="rag-icon" />
-          <div>
-            <h2>FoodChow Knowledge Base & RAG Index Inspector</h2>
-            <p>Query the indexed vector/hybrid RAG troubleshooting documentation used by the autonomous support agent. Click any card to pop up the full article.</p>
+        <div className="title-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <Database className="rag-icon" />
+            <div>
+              <h2>FoodChow Knowledge Base & RAG Index Inspector</h2>
+              <p>Query, add, edit, or delete indexed RAG troubleshooting documentation used by the autonomous support agent.</p>
+            </div>
           </div>
+
+          {onCreateDoc && (
+            <button 
+              className="btn-create-item" 
+              onClick={onCreateDoc}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.6rem 1rem',
+                background: 'linear-gradient(135deg, #EC4899, #DB2777)',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(236, 72, 153, 0.3)'
+              }}
+            >
+              <Plus style={{ width: 16, height: 16 }} />
+              <span>Create New Article</span>
+            </button>
+          )}
         </div>
 
-        <div className="search-controls">
+        <div className="search-controls" style={{ marginTop: '1rem' }}>
           <div className="input-group">
             <Search className="search-icon" />
             <input
@@ -78,8 +130,7 @@ export const RAGInspector: React.FC = () => {
               {results.map((res, i) => (
                 <div 
                   key={i} 
-                  className="rag-card full-width match clickable"
-                  onClick={() => setActiveDocModal(res.doc)}
+                  className="rag-card full-width match"
                 >
                   <div className="card-badge-row">
                     <span className="cat-badge">{res.doc.category}</span>
@@ -88,7 +139,6 @@ export const RAGInspector: React.FC = () => {
 
                   <div className="card-title-row">
                     <h4>{res.doc.title}</h4>
-                    <ExternalLink className="pop-icon" />
                   </div>
 
                   <div className="matched-tags">
@@ -103,6 +153,24 @@ export const RAGInspector: React.FC = () => {
                   <div className="doc-content-formatted">
                     <FormattedText content={res.doc.content} />
                   </div>
+
+                  {/* Card Actions */}
+                  <div className="rag-card-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                    <button className="btn-read-full" onClick={() => handleView(res.doc)} style={{ flex: 1 }}>
+                      <BookOpen className="btn-icon" />
+                      <span>Read Article</span>
+                    </button>
+                    {onEditDoc && (
+                      <button className="btn-edit-item" onClick={() => onEditDoc(res.doc)} title="Edit Article" style={{ padding: '0.5rem 0.85rem', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-main)', cursor: 'pointer' }}>
+                        <Edit3 style={{ width: 15, height: 15 }} />
+                      </button>
+                    )}
+                    {onDeleteDoc && (
+                      <button className="btn-delete-item" onClick={() => onDeleteDoc(res.doc.id)} title="Delete Article" style={{ padding: '0.5rem 0.85rem', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', color: '#EF4444', cursor: 'pointer' }}>
+                        <Trash2 style={{ width: 15, height: 15 }} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -114,8 +182,7 @@ export const RAGInspector: React.FC = () => {
               {filteredBaseDocs.map((doc) => (
                 <div 
                   key={doc.id} 
-                  className="rag-card clickable"
-                  onClick={() => setActiveDocModal(doc)}
+                  className="rag-card"
                 >
                   <div className="card-badge-row">
                     <span className="cat-badge">{doc.category}</span>
@@ -134,13 +201,27 @@ export const RAGInspector: React.FC = () => {
                   </div>
 
                   <div className="doc-preview">
-                    <FormattedText content={doc.content.slice(0, 180) + '...'} />
+                    <FormattedText content={doc.content.slice(0, 150) + '...'} />
                   </div>
 
-                  <button className="btn-read-full">
-                    <BookOpen className="btn-icon" />
-                    <span>Read Full Article (Popup)</span>
-                  </button>
+                  <div className="rag-card-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.85rem' }}>
+                    <button className="btn-read-full" onClick={() => handleView(doc)} style={{ flex: 1 }}>
+                      <BookOpen className="btn-icon" />
+                      <span>Read</span>
+                    </button>
+
+                    {onEditDoc && (
+                      <button className="btn-edit-item" onClick={() => onEditDoc(doc)} title="Edit Article" style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-main)', cursor: 'pointer' }}>
+                        <Edit3 style={{ width: 15, height: 15 }} />
+                      </button>
+                    )}
+
+                    {onDeleteDoc && (
+                      <button className="btn-delete-item" onClick={() => onDeleteDoc(doc.id)} title="Delete Article" style={{ padding: '0.5rem 0.75rem', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', color: '#EF4444', cursor: 'pointer' }}>
+                        <Trash2 style={{ width: 15, height: 15 }} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

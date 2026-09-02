@@ -3,7 +3,8 @@ import { ChatMessage, EscalationTicket, PredefinedScenario } from '../types/agen
 import { FoodChowAgentEngine } from '../agent/agentEngine';
 import { ObservabilityTraceDrawer } from './ObservabilityTraceDrawer';
 import { FormattedText } from '../utils/formatText';
-import { PREDEFINED_SCENARIOS } from '../data/predefinedScenarios';
+import { appStore } from '../store/appStore';
+import { exportCustomerChatHistoryJSON } from '../utils/jsonHistoryExporter';
 import { 
   Send, 
   Bot, 
@@ -16,7 +17,12 @@ import {
   Zap,
   ChevronRight,
   Mic,
-  MicOff
+  MicOff,
+  Copy,
+  Check,
+  Reply,
+  Download,
+  X
 } from 'lucide-react';
 
 interface CustomerChatProps {
@@ -35,7 +41,18 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [replyingToMsg, setReplyingToMsg] = useState<ChatMessage | null>(null);
+
+  const [scenarios, setScenarios] = useState<PredefinedScenario[]>(() => appStore.getScenarios());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const unsubscribe = appStore.subscribe(() => {
+      setScenarios([...appStore.getScenarios()]);
+    });
+    return unsubscribe;
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,6 +61,16 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isProcessing]);
+
+  const handleCopyMessage = (content: string, msgId: string) => {
+    navigator.clipboard.writeText(content);
+    setCopiedMsgId(msgId);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
+
+  const handleReplyMessage = (msg: ChatMessage) => {
+    setReplyingToMsg(msg);
+  };
 
   const handleVoiceInput = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -70,8 +97,14 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
   };
 
   const handleSendMessage = async (textToSend?: string) => {
-    const text = textToSend || inputText;
+    let text = textToSend || inputText;
     if (!text.trim() || isProcessing) return;
+
+    if (replyingToMsg && !textToSend) {
+      const senderTag = replyingToMsg.sender === 'customer' ? 'Customer' : replyingToMsg.sender === 'human_agent' ? 'Human Agent' : 'AI Agent';
+      text = `> 💬 *Replying to ${senderTag}: "${replyingToMsg.content.slice(0, 60)}..."*\n\n${text}`;
+      setReplyingToMsg(null);
+    }
 
     const customerMsg: ChatMessage = {
       id: 'MSG_' + Math.random().toString(36).substring(2, 9),
@@ -80,9 +113,26 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
       timestamp: new Date().toISOString()
     };
 
-    const updatedHistory = [...messages, customerMsg];
-    setMessages(updatedHistory);
+    appStore.addMessage(customerMsg);
     if (!textToSend) setInputText('');
+
+    // Check if Human Support Specialist has joined/replied in conversation
+    const currentMsgs = appStore.getMessages();
+    const isHumanActive = currentMsgs.some(m => m.sender === 'human_agent');
+
+    if (isHumanActive) {
+      // Human Support Specialist is active: Route customer message to ticket history for Human Agent
+      const activeTickets = appStore.getTickets();
+      if (activeTickets.length > 0) {
+        const latestTicket = activeTickets[0];
+        appStore.updateTicket(latestTicket.id, {
+          conversationHistory: [...latestTicket.conversationHistory, customerMsg]
+        });
+      }
+      // AI Agent stands down and does NOT interfere!
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -90,11 +140,11 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
 
       const { agentMessage, newTicket } = await FoodChowAgentEngine.processMessage(
         text,
-        updatedHistory,
+        currentMsgs,
         activeOutlet
       );
 
-      setMessages(prev => [...prev, agentMessage]);
+      appStore.addMessage(agentMessage);
 
       if (newTicket) {
         onTicketCreated(newTicket);
@@ -111,7 +161,7 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
   };
 
   const handleResetChat = () => {
-    setMessages([
+    appStore.setMessages([
       {
         id: 'MSG_INIT',
         sender: 'agent',
@@ -122,8 +172,29 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
     ]);
   };
 
+  const isHumanConnected = messages.some(m => m.sender === 'human_agent');
+
   return (
     <div className="chat-layout">
+      {isHumanConnected && (
+        <div className="human-takeover-banner" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          padding: '0.6rem 1rem',
+          background: 'rgba(16, 185, 129, 0.12)',
+          border: '1px solid rgba(16, 185, 129, 0.4)',
+          borderRadius: '10px',
+          color: '#10B981',
+          fontSize: '0.82rem',
+          fontWeight: 700,
+          margin: '0.5rem 0.5rem 0 0.5rem'
+        }}>
+          <Headphones style={{ width: 16, height: 16 }} />
+          <span>Human Support Specialist Connected — AI Agent Standby (Muted)</span>
+        </div>
+      )}
+
       {/* Scenario Chips Bar */}
       <div className="preset-bar">
         <div className="preset-label">
@@ -131,7 +202,7 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
           <span>Quick Scenarios:</span>
         </div>
         <div className="chip-scroll">
-          {PREDEFINED_SCENARIOS.map(sc => (
+          {scenarios.map(sc => (
             <button
               key={sc.id}
               className="scenario-chip"
@@ -164,7 +235,7 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
               <div className="message-header">
                 <span className="sender-name">
                   {msg.sender === 'customer'
-                    ? 'Restaurant Manager'
+                    ? 'Customer'
                     : msg.sender === 'human_agent'
                     ? 'Human Support Specialist'
                     : 'FoodChow AI Support Agent'}
@@ -199,6 +270,27 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Copy & Reply Options Bar */}
+                <div className="msg-toolbar">
+                  <button
+                    className="msg-tool-btn"
+                    onClick={() => handleCopyMessage(msg.content, msg.id)}
+                    title="Copy Message Text"
+                  >
+                    {copiedMsgId === msg.id ? <Check style={{ width: 13, height: 13, color: '#10B981' }} /> : <Copy style={{ width: 13, height: 13 }} />}
+                    <span>{copiedMsgId === msg.id ? 'Copied!' : 'Copy'}</span>
+                  </button>
+
+                  <button
+                    className="msg-tool-btn"
+                    onClick={() => handleReplyMessage(msg)}
+                    title="Reply to Message"
+                  >
+                    <Reply style={{ width: 13, height: 13 }} />
+                    <span>Reply</span>
+                  </button>
+                </div>
               </div>
 
               {/* Observability Trace Drawer for Agent Messages */}
@@ -233,6 +325,35 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Reply Quote Bar */}
+      {replyingToMsg && (
+        <div className="reply-quote-bar" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'var(--bg-subtle)',
+          borderLeft: '3px solid var(--primary)',
+          padding: '0.45rem 0.85rem',
+          margin: '0.5rem 0.5rem 0 0.5rem',
+          borderRadius: '6px',
+          fontSize: '0.8rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-main)', overflow: 'hidden' }}>
+            <Reply style={{ width: 14, height: 14, color: 'var(--primary)', flexShrink: 0 }} />
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Replying to <strong>{replyingToMsg.sender === 'customer' ? 'Customer' : replyingToMsg.sender === 'human_agent' ? 'Human Agent' : 'AI Agent'}</strong>: "{replyingToMsg.content.slice(0, 60)}..."
+            </span>
+          </div>
+          <button 
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            onClick={() => setReplyingToMsg(null)}
+            title="Cancel Reply"
+          >
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+      )}
+
       {/* Input Control Box */}
       <div className="chat-input-bar">
         <button
@@ -241,6 +362,14 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
           title="Reset Conversation History"
         >
           <RotateCcw className="btn-icon" />
+        </button>
+
+        <button
+          className="icon-btn"
+          onClick={() => exportCustomerChatHistoryJSON(messages)}
+          title="Download Customer Chat History as JSON File"
+        >
+          <Download className="btn-icon" />
         </button>
 
         <button
@@ -254,7 +383,7 @@ export const CustomerChat: React.FC<CustomerChatProps> = ({
         <input
           type="text"
           className="chat-input"
-          placeholder="Describe your issue or order number (e.g. 'Printer not working', 'Order #1024')..."
+          placeholder={isHumanConnected ? "Type your message to Human Support Specialist..." : "Describe your issue or order number (e.g. 'Printer not working', 'Order #1024')..."}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}

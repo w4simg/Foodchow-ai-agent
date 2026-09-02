@@ -7,8 +7,8 @@ interface FormattedTextProps {
 export const FormattedText: React.FC<FormattedTextProps> = ({ content }) => {
   if (!content) return null;
 
-  // Split lines
-  const lines = content.split('\n');
+  // Clean <br> tags and split lines
+  const lines = content.replace(/<br\s*\/?>/gi, '\n').split('\n');
 
   const parseInline = (text: string): React.ReactNode[] => {
     // Regex for bold (**text**), code (`text`), and inline tags
