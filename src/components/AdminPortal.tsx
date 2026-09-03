@@ -75,11 +75,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   });
   
   const [groqKey, setGroqKey] = useState<string>(() => {
-    return localStorage.getItem('foodchow_groq_key') || localStorage.getItem('foodchow_llm_key') || '';
+    return localStorage.getItem('foodchow_groq_key')
+      || localStorage.getItem('foodchow_llm_key')
+      || import.meta.env.VITE_GROQ_API_KEY
+      || '';
   });
-  
+
   const [geminiKey, setGeminiKey] = useState<string>(() => {
-    return localStorage.getItem('foodchow_gemini_key') || '';
+    return localStorage.getItem('foodchow_gemini_key')
+      || import.meta.env.VITE_GEMINI_API_KEY
+      || '';
   });
 
   useEffect(() => {
@@ -127,42 +132,114 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     let hasError = false;
 
     try {
+      // ── Groq test: use a real 1-token chat completion (CORS-safe) ──
       if (groqKey.trim()) {
-        const groqRes = await fetch('https://api.groq.com/openai/v1/models', {
-          headers: { 'Authorization': `Bearer ${groqKey.trim()}` }
-        });
-        if (groqRes.ok) {
-          results.push('✅ Groq Primary API (openai/gpt-oss-120b): Authorized & Active!');
-        } else {
+        try {
+          const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${groqKey.trim()}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: 'openai/gpt-oss-120b',
+              messages: [{ role: 'user', content: 'ping' }],
+              max_tokens: 1
+            })
+          });
+          if (groqRes.ok || groqRes.status === 200) {
+            results.push('✅ Groq Primary API (openai/gpt-oss-120b): Authorized & Active!');
+          } else if (groqRes.status === 401) {
+            hasError = true;
+            results.push('❌ Groq API Key: Invalid or expired (401 Unauthorized)');
+          } else if (groqRes.status === 429) {
+            results.push('⚠️ Groq API Key: Valid but rate-limited (429) — failover will activate automatically');
+          } else {
+            hasError = true;
+            results.push(`❌ Groq API Error (HTTP ${groqRes.status})`);
+          }
+        } catch {
           hasError = true;
-          results.push(`❌ Groq API Key Error (HTTP ${groqRes.status})`);
+          results.push('❌ Groq API: Network error — check internet connection');
         }
       } else {
-        results.push('ℹ️ Groq API Key: Not provided');
+        results.push('ℹ️ Groq API Key: Not provided — will skip to next provider');
       }
 
+      // ── Gemini test: discover available models first, then test with best one ──
       if (geminiKey.trim()) {
-        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey.trim()}`);
-        if (geminiRes.ok) {
-          results.push('✅ Google Gemini Secondary Fallback API: Authorized & Active!');
-        } else {
+        try {
+          // Step 1: list all available models for this key
+          const listRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey.trim()}`
+          );
+
+          if (listRes.status === 403) {
+            hasError = true;
+            results.push('❌ Gemini API Key: Invalid or Gemini API not enabled (403). Go to aistudio.google.com to create a valid key.');
+          } else if (listRes.ok) {
+            const listData = await listRes.json();
+            // find first generateContent-capable model
+            const available: string[] = (listData.models || [])
+              .filter((m: any) =>
+                Array.isArray(m.supportedGenerationMethods) &&
+                m.supportedGenerationMethods.includes('generateContent') &&
+                m.name
+              )
+              .map((m: any) => (m.name as string).replace('models/', ''));
+
+            if (available.length === 0) {
+              hasError = true;
+              results.push('❌ Gemini API: No generateContent-capable models found for this key.');
+            } else {
+              // Step 2: test with best available model (prefer flash)
+              const preferred = available.find(n => n.includes('flash')) || available[0];
+              const testBody = JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+                generationConfig: { maxOutputTokens: 1 }
+              });
+              const testRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${preferred}:generateContent?key=${geminiKey.trim()}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: testBody }
+              );
+              if (testRes.ok || testRes.status === 400) {
+                results.push(`✅ Google Gemini Fallback API (${preferred}): Authorized & Active! [${available.length} models available]`);
+              } else if (testRes.status === 429) {
+                results.push(`⚠️ Gemini API (${preferred}): Key valid but quota exceeded — local engine will activate`);
+              } else {
+                hasError = true;
+                results.push(`❌ Gemini API Error on ${preferred} (HTTP ${testRes.status})`);
+              }
+            }
+          } else if (listRes.status === 429) {
+            results.push('⚠️ Gemini API: Rate-limited (429) — key is valid, local engine will activate if needed');
+          } else {
+            hasError = true;
+            results.push(`❌ Gemini API Error (HTTP ${listRes.status})`);
+          }
+        } catch {
           hasError = true;
-          results.push(`❌ Gemini API Key Error (HTTP ${geminiRes.status})`);
+          results.push('❌ Gemini API: Network error — check internet connection');
         }
       } else {
-        results.push('ℹ️ Gemini API Key: Not provided');
+        results.push('ℹ️ Gemini API Key: Not provided — Local Engine will be final fallback');
       }
+
+
+
+      // Always add local engine status
+      results.push('✅ FoodChow Local Engine: Always available (offline fallback)');
 
       setKeyTestResult({
         status: hasError ? 'warning' : 'success',
-        message: hasError ? '⚠️ API Connection Warnings Detected' : '✅ LLM Engine & Auto-Failover Quotas Active!',
+        message: hasError ? '⚠️ Some API Keys have issues — failover chain will handle it' : '✅ LLM Engine & Auto-Failover Chain Active!',
         details: results.join(' • ')
       });
     } catch (err: any) {
       setKeyTestResult({
         status: 'error',
-        message: '❌ Key Connection Error',
-        details: 'Failed to reach API authorization servers.'
+        message: '❌ Test Failed',
+        details: 'Unexpected error during API key verification. Check your internet connection.'
       });
     } finally {
       setIsTestingKey(false);

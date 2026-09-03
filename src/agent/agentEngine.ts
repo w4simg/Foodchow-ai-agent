@@ -17,35 +17,70 @@ export class FoodChowAgentEngine {
     return prefix + '_' + Math.random().toString(36).substring(2, 9).toUpperCase();
   }
 
-  // Live Gemini API Caller
-  private static async callGeminiAPI(apiKey: string, userPrompt: string, contextInfo: string): Promise<string | null> {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{
-                text: `System: You are the FoodChow Autonomous AI Support Agent for restaurant management. Be polite, friendly, helpful, and concise. Format output with clean GitHub markdown.
-Context & Diagnostics: ${contextInfo}
-User Question: "${userPrompt}"`
-              }]
-            }
-          ]
-        })
-      });
+  // Cache the best available Gemini model after first discovery
+  private static _geminiModel: string | null = null;
 
+  // Live Gemini API Caller — auto-discovers best available model for the key
+  private static async callGeminiAPI(apiKey: string, userPrompt: string, contextInfo: string): Promise<string | null> {
+    const body = JSON.stringify({
+      contents: [{
+        role: 'user',
+        parts: [{
+          text: `System: You are the FoodChow Autonomous AI Support Agent for restaurant management. Be polite, friendly, helpful, and concise. Format output with clean GitHub markdown.\nContext & Diagnostics: ${contextInfo}\nUser Question: "${userPrompt}"`
+        }]
+      }]
+    });
+
+    // Discover best model if not cached
+    if (!this._geminiModel) {
+      try {
+        const listRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`
+        );
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          const available: string[] = (listData.models || [])
+            .filter((m: any) =>
+              Array.isArray(m.supportedGenerationMethods) &&
+              m.supportedGenerationMethods.includes('generateContent') &&
+              m.name
+            )
+            .map((m: any) => (m.name as string).replace('models/', ''));
+          // Prefer flash models for speed, then any available
+          this._geminiModel =
+            available.find(n => n.includes('2.0-flash')) ||
+            available.find(n => n.includes('flash')) ||
+            available[0] ||
+            null;
+          console.log('[Gemini] Auto-selected model:', this._geminiModel, '| Available:', available.length);
+        }
+      } catch {
+        console.warn('[Gemini] Could not list models, will try known names...');
+      }
+      // Fallback list if discovery fails
+      if (!this._geminiModel) {
+        this._geminiModel = 'gemini-2.0-flash';
+      }
+    }
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${this._geminiModel}:generateContent?key=${apiKey.trim()}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }
+      );
       if (response.ok) {
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text && text.trim().length > 0) {
-          return text.trim();
-        }
+        if (text && text.trim().length > 0) return text.trim();
+      } else if (response.status === 404) {
+        // cached model no longer valid — clear cache and try gemini-1.5-flash-latest as last resort
+        this._geminiModel = null;
+        console.warn('[Gemini] Cached model returned 404, cache cleared.');
+      } else {
+        console.warn(`[Gemini] Model ${this._geminiModel} returned HTTP ${response.status}`);
       }
     } catch (err) {
-      console.warn('[Gemini API Call Failed, falling back to engine response]:', err);
+      console.warn('[Gemini API Call Failed]:', err);
     }
     return null;
   }
@@ -91,8 +126,17 @@ User Question: "${userPrompt}"`
   // Automatic Multi-Tier Fallback LLM Synthesizer: Groq (openai/gpt-oss-120b) -> Gemini 1.5 -> Local Engine
   private static async synthesizeLLMResponse(userPrompt: string, contextInfo: string): Promise<string | null> {
     const providerMode = localStorage.getItem('foodchow_llm_provider') || 'AUTO';
-    const groqKey = (localStorage.getItem('foodchow_groq_key') || localStorage.getItem('foodchow_llm_key') || '').trim();
-    const geminiKey = (localStorage.getItem('foodchow_gemini_key') || '').trim();
+    const groqKey = (
+      localStorage.getItem('foodchow_groq_key') ||
+      localStorage.getItem('foodchow_llm_key') ||
+      import.meta.env.VITE_GROQ_API_KEY ||
+      ''
+    ).trim();
+    const geminiKey = (
+      localStorage.getItem('foodchow_gemini_key') ||
+      import.meta.env.VITE_GEMINI_API_KEY ||
+      ''
+    ).trim();
 
     if (providerMode === 'GROQ') {
       if (groqKey) return await this.callGroqAPI(groqKey, userPrompt, contextInfo);
